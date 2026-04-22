@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Pre-commit hook for Claude Code Starter
+#
+# Copy to .husky/pre-commit and `chmod +x .husky/pre-commit`.
+# (For plain git hooks: copy to .git/hooks/pre-commit instead.)
+# For pre-commit framework users, convert to .pre-commit-config.yaml — the same checks apply.
+
+set -e
+
+# ──────────────────────────────────────────────────────────────
+# 1. Secret scanning — gitleaks
+# ──────────────────────────────────────────────────────────────
+# Scans staged changes only. Millisecond-fast. Non-zero exit blocks the commit.
+# Install: `brew install gitleaks` (macOS), `apt install gitleaks` (Debian), or
+#          download from https://github.com/gitleaks/gitleaks/releases
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --verbose --redact
+else
+  echo "WARNING: gitleaks not installed — skipping secret scan. Install with 'brew install gitleaks'." >&2
+fi
+
+# ──────────────────────────────────────────────────────────────
+# 2. Regenerate the .ai/ codebase index
+# ──────────────────────────────────────────────────────────────
+# Only runs if scripts/generate-repo-map.mjs exists. Silent on success,
+# auto-stages any updated .ai/ files so the fresh index lands in the commit.
+if [ -f scripts/generate-repo-map.mjs ]; then
+  node scripts/generate-repo-map.mjs >/dev/null 2>&1 && git add .ai/ 2>/dev/null || true
+fi
+
+# ──────────────────────────────────────────────────────────────
+# 3. (Optional) Dependency audit — supply-chain defense
+# ──────────────────────────────────────────────────────────────
+# Only runs when a manifest / lockfile is part of this commit. Keep exactly
+# one block uncommented for your ecosystem — these catch known CVEs in the
+# resolved dependency tree. See guides/08-dependencies.md.
+#
+# npm:
+#   if git diff --cached --name-only --diff-filter=d | grep -qE '(^|/)(package\.json|package-lock\.json)$'; then
+#     npm audit --audit-level=high || { echo "npm audit flagged issues — resolve or acknowledge before committing." >&2; exit 1; }
+#   fi
+#
+# Composer:
+#   if git diff --cached --name-only --diff-filter=d | grep -qE '(^|/)(composer\.json|composer\.lock)$'; then
+#     composer audit --no-dev || { echo "composer audit flagged issues — resolve or acknowledge before committing." >&2; exit 1; }
+#   fi
+#
+# NuGet / .NET:
+#   if git diff --cached --name-only --diff-filter=d | grep -qE '\.csproj$|Directory\.Packages\.props$|packages\.lock\.json$'; then
+#     dotnet list package --vulnerable --include-transitive | tee /tmp/dotnet-vuln.log
+#     grep -q '> ' /tmp/dotnet-vuln.log && { echo "dotnet flagged vulnerable packages — resolve or acknowledge before committing." >&2; exit 1; } || true
+#   fi
+
+# ──────────────────────────────────────────────────────────────
+# 4. (Optional) Lint / format / typecheck staged files
+# ──────────────────────────────────────────────────────────────
+# Uncomment whichever apply. Keep the command list short — slow pre-commits
+# get disabled and then nothing runs at all.
+#
+# Node (lint-staged handles per-file globs):
+#   npx lint-staged
+#
+# TypeScript projects (fast):
+#   npx tsc --noEmit
+#
+# Python (ruff):
+#   ruff check --fix $(git diff --cached --name-only --diff-filter=d | grep '\.py$') 2>/dev/null || true
+#
+# Go:
+#   gofmt -l $(git diff --cached --name-only --diff-filter=d | grep '\.go$') | (! grep .)
+
+exit 0

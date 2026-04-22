@@ -1,0 +1,53 @@
+{
+  "_comment": "Drop this into .mcp.json at the root of your project to share MCP server config with teammates. Each server below is commented out with _disabled_ — remove the prefix on the one you want. Run `claude mcp list` in-session to confirm servers load. See guides/02-db-api-access.md.",
+
+  "mcpServers": {
+    "_disabled_postgres-dev": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://claude_readonly:${PG_RO_PW}@localhost:5432/app_dev"
+      ],
+      "_note": "Read-only Postgres role. See guides/02-db-api-access.md for the SQL to create the role safely."
+    },
+
+    "_disabled_stripe-test": {
+      "command": "npx",
+      "args": ["-y", "@stripe/mcp", "--tools=all", "--api-key=${STRIPE_TEST_KEY}"],
+      "_note": "Stripe test-mode keys only. Never paste a live key here — restrict live access behind human-in-the-loop."
+    },
+
+    "_disabled_github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PAT}"
+      },
+      "_note": "Use a fine-grained PAT scoped to a single repo. Rotate monthly."
+    },
+
+    "_disabled_sentry": {
+      "command": "npx",
+      "args": ["-y", "@sentry/mcp-server", "--access-token=${SENTRY_TOKEN}"]
+    },
+
+    "_disabled_linear": {
+      "command": "npx",
+      "args": ["-y", "@linear/mcp-server"],
+      "env": {
+        "LINEAR_API_KEY": "${LINEAR_API_KEY}"
+      }
+    },
+
+    "_disabled_filesystem-scratch": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp/claude-scratch"],
+      "_note": "Scoped filesystem access outside the repo. Useful for staging large generated artifacts."
+    }
+  },
+
+  "_comment_scope": "After uncommenting a server here, open .claude/settings.json and add the tools you want auto-allowed to permissions.allow, e.g. \"mcp__postgres-dev__query\". Leave others to prompt per-call. Never auto-allow prod-touching tools.",
+
+  "_comment_env_vars": "Inject secrets with `op run -- claude`, `doppler run -- claude`, or `infisical run -- claude`. Never put a real API key in this file — it is checked into git."
+}

@@ -1,0 +1,78 @@
+{
+  "_comment": "Drop this into .claude/settings.json at the root of your project. Tailor the deny list to your repo. See guides/01-secrets.md and guides/06-hooks.md. JSON does not support true comments — keys prefixed with _ are ignored by Claude Code's loader; strip them before shipping if you prefer.",
+
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/.env)",
+      "Read(./**/.env.*)",
+      "Read(./secrets/**)",
+      "Read(./**/*.pem)",
+      "Read(./**/id_rsa)",
+      "Read(./**/id_ed25519)",
+      "Read(./config/credentials.json)",
+      "Read(./service-account*.json)",
+      "Read(./.pgpass)",
+      "Read(./.aws/**)",
+      "Read(./.ssh/**)",
+
+      "Bash(cat .env*)",
+      "Bash(cat */.env*)",
+      "Bash(cat **/.env*)",
+      "Bash(printenv)",
+      "Bash(env)",
+
+      "Bash(rm -rf *)",
+      "Bash(rm -rf /)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+
+      "Bash(psql *prod*)",
+      "Bash(mysql *prod*)"
+    ],
+    "allow": []
+  },
+
+  "_comment_allow": "Populate `allow` with genuinely safe read-only tool calls to cut permission prompts. Examples: \"Bash(npm run test*)\", \"Bash(git status)\", \"Bash(git diff*)\", \"Bash(ls *)\". Start empty; add entries only after a pattern has proved safe in this repo.",
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // empty' | grep -E '(\\.env($|\\.|/)|\\.pem$|id_rsa$|id_ed25519$|/secrets/|service-account.*\\.json|\\.pgpass|credentials\\.json)' && { echo 'BLOCKED: sensitive file' >&2; exit 2; } || exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command // empty' | grep -qiE '(drop +table|delete +from|truncate|alter +role|rm +-rf +/|git +push +(-f|--force)|psql +[^[:space:]]*prod|mysql +[^[:space:]]*prod)' && { echo 'BLOCKED: destructive pattern — run manually if intentional' >&2; exit 2; } || exit 0"
+          }
+        ]
+      }
+    ]
+  },
+
+  "_comment_hooks": "PreToolUse hooks are the only blocking enforcement surface. Exit code 2 blocks the tool call and feeds stderr back to Claude. deny rules alone have regressed in multiple releases — keep the hook.",
+
+  "_example_postToolUse_snippets": {
+    "format_on_edit": "jq -r '.tool_input.file_path // empty' | grep -E '\\.(ts|tsx|js|jsx|json|md)$' | xargs -I {} npx --no-install prettier --write {} 2>/dev/null || true",
+    "type_check": "npx --no-install tsc --noEmit 2>&1 | head -20",
+    "regen_repo_map": "node scripts/generate-repo-map.mjs >/dev/null 2>&1 || true"
+  },
+
+  "_comment_next_steps": [
+    "1. Remove the _comment_* and _example_* keys before shipping, or leave them — Claude Code ignores unknown keys.",
+    "2. Run `/permissions` in a Claude Code session to confirm the deny list is loaded.",
+    "3. Deliberately request a blocked action (ask Claude to `cat .env`) — verify the hook exits 2.",
+    "4. Add repo-specific paths to the deny list for any file that could hold credentials.",
+    "5. Consider a `.claude/settings.local.json` (gitignored) for per-developer overrides."
+  ]
+}
